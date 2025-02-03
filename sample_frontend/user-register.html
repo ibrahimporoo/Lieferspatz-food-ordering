@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kundenkonto Erstellen | Lieferspatz</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .registration-container {
+            max-width: 600px;
+            margin: 2rem auto;
+            padding: 2rem;
+            background: #f8f8f8;
+            border-radius: 8px;
+        }
+
+        .registration-form {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-group.full-width {
+            grid-column: 1 / -1;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: bold;
+            color: #333;
+        }
+
+        input {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        .button {
+            grid-column: 1 / -1;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar" id="navbar"></nav>
+
+    <div class="registration-container">
+        <h1>Konto Erstellen</h1>
+        <form id="registrationForm" class="registration-form">
+            <div class="form-group full-width">
+                <label for="email">Email:</label>
+                <input type="email" id="email" required>
+            </div>
+
+            <div class="form-group">
+                <label for="vorname">Vorname:</label>
+                <input type="text" id="vorname" required>
+            </div>
+
+            <div class="form-group">
+                <label for="nachname">Nachname:</label>
+                <input type="text" id="nachname" required>
+            </div>
+
+            <div class="form-group full-width">
+                <label for="adresse">Adresse:</label>
+                <input type="text" id="adresse" required>
+            </div>
+
+            <div class="form-group">
+                <label for="plz">PLZ:</label>
+                <input type="text" id="plz" required pattern="[0-9]{5}">
+            </div>
+
+            <div class="form-group">
+                <label for="passwort">Passwort:</label>
+                <input type="password" id="passwort" required>
+            </div>
+
+            <button type="submit" class="button">Konto erstellen</button>
+        </form>
+        <div id="error-message" class="error-message" style="margin-top: 1rem;"></div>
+        <p style="margin-top: 1rem; text-align: center;">
+            Sie haben bereits ein Konto? <a href="user-login.html">Hier anmelden</a>
+        </p>
+    </div>
+
+    <script src="navbar.js"></script>
+    <script>
+        document.getElementById('registrationForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const formData = {
+                email: document.getElementById('email').value,
+                vorname: document.getElementById('vorname').value,
+                nachname: document.getElementById('nachname').value,
+                passwort: document.getElementById('passwort').value,
+                adresse: document.getElementById('adresse').value,
+                plz: document.getElementById('plz').value
+            };
+
+            try {
+                const response = await fetch('http://127.0.0.1:5000/users/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(formData)
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    // Store token and balance
+                    localStorage.setItem('accessToken', data.data.access_token);
+                    localStorage.setItem('userBalance', data.data.geld);
+                    localStorage.setItem('type', 'user');
+                    
+                    // Redirect to open restaurants
+                    window.location.href = 'restaurants-open.html';
+                } else {
+                    document.getElementById('error-message').textContent = 
+                        data.data.email || 'Registrierung fehlgeschlagen. Bitte überprüfen Sie Ihre Eingabe. Möglicherweise existiert bereits ein Konto mit dieser E-Mail.';
+                }
+
+            } catch (error) {
+                console.error('Registration error:', error);
+                document.getElementById('error-message').textContent = 
+                    error;
+            }
+        });
+    </script>
+    <script src="https://cdn.socket.io/4.8.1/socket.io.min.js" integrity="sha384-mkQ3/7FUtcGyoppY6bz/PORYoGqOl7/aSUMn2ymDOJcapfS6PHqxhRTMh1RR0Q6+" crossorigin="anonymous"></script>
+</body>
+</html>

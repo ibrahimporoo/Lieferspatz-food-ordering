@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Restaurantskonto Erstellen | Lieferspatz</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .registration-form {
+            max-width: 600px;
+            margin: 2rem auto;
+            padding: 2rem;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: bold;
+        }
+
+        input, textarea {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-bottom: 0.5rem;
+        }
+
+        .file-input {
+            margin: 1rem 0;
+        }
+
+        .error-message {
+            color: red;
+            margin-top: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar" id="navbar"></nav>
+
+    <div class="content">
+        <h1>Restaurantskonto Erstellen</h1>
+        <form class="registration-form" id="registrationForm">
+            <div class="form-group">
+                <label for="name">Name *</label>
+                <input type="text" id="name" required>
+            </div>
+
+            <div class="form-group">
+                <label for="email">Email *</label>
+                <input type="email" id="email" required>
+            </div>
+
+            <div class="form-group">
+                <label for="adresse">Adresse *</label>
+                <input type="text" id="adresse" required>
+            </div>
+
+            <div class="form-group">
+                <label for="plz">PLZ *</label>
+                <input type="text" id="plz" required>
+            </div>
+
+            <div class="form-group">
+                <label for="passwort">Passwort *</label>
+                <input type="password" id="passwort" required>
+            </div>
+
+            <div class="form-group">
+                <label for="beschreibung">Beschreibung</label>
+                <textarea id="beschreibung" rows="3"></textarea>
+            </div>
+
+            <div class="form-group">
+                <label>Logo (optional)</label>
+                <input type="file" id="logo" class="file-input" accept="image/*">
+            </div>
+
+            <div class="form-group">
+                <label>Bild (optional)</label>
+                <input type="file" id="image" class="file-input" accept="image/*">
+            </div>
+
+            <div id="error-message" class="error-message"></div>
+            <button type="submit" class="button">Registrieren</button>
+        </form>
+    </div>
+
+    <script>
+        async function readFileAsBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve({
+                    filename: file.name,
+                    image_data: reader.result.split(',')[1]
+                });
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
+
+        document.getElementById('registrationForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const errorDiv = document.getElementById('error-message');
+            errorDiv.textContent = '';
+
+            try {
+                // Get form values
+                const formData = {
+                    name: document.getElementById('name').value,
+                    email: document.getElementById('email').value,
+                    adresse: document.getElementById('adresse').value,
+                    plz: document.getElementById('plz').value,
+                    passwort: document.getElementById('passwort').value,
+                    beschreibung: document.getElementById('beschreibung').value || null
+                };
+
+                // Handle file uploads
+                const logoFile = document.getElementById('logo').files[0];
+                const imageFile = document.getElementById('image').files[0];
+
+                // Process files
+                if (logoFile) formData.logo = await readFileAsBase64(logoFile);
+                if (imageFile) formData.img = await readFileAsBase64(imageFile);
+
+                // Send request
+                const response = await fetch('http://127.0.0.1:5000/restaurants/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(formData)
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    localStorage.setItem('accessToken', data.data.access_token);
+                    localStorage.setItem('userBalance', data.data.geld);
+                    localStorage.setItem('type', 'restaurant');
+                    window.location.href = 'restaurant-profile.html';
+                } else {
+                    errorDiv.textContent = data.message || 'Registration fehlgeschlagen';
+                }
+
+            } catch (error) {
+                console.error('Registration error:', error);
+                errorDiv.textContent = 'Ein Fehler ist aufgetreten. Bitte versuchen Sie es später erneut.';
+            }
+        });
+    </script>
+
+    <!-- Shared navbar script -->
+    <script src="navbar.js"></script>
+
+    <script src="https://cdn.socket.io/4.8.1/socket.io.min.js" integrity="sha384-mkQ3/7FUtcGyoppY6bz/PORYoGqOl7/aSUMn2ymDOJcapfS6PHqxhRTMh1RR0Q6+" crossorigin="anonymous"></script>
+</body>
+</html>

@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neuen Item hinzufügen | Lieferspatz</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .form-container {
+            max-width: 400px;
+            width: 100%;
+            background: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin-top: 20px;
+        }
+        h1 {
+            font-size: 24px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        form label {
+            display: block;
+            margin-top: 10px;
+            font-weight: bold;
+        }
+        form input, form textarea, form button {
+            width: 100%;
+            margin: 5px 0;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        form button {
+            background-color: #28a745;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+            margin-top: 15px;
+        }
+        form button:hover {
+            background-color: #218838;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar" id="navbar"></nav>
+
+    <div class="form-container">
+        <h1>Neuen Item hinzufügen</h1>
+        <form id="new-item-form">
+            <label for="name">Name</label>
+            <input type="text" id="name" required>
+            
+            <label for="preis">Preis (€)</label>
+            <input type="number" id="preis" step="0.01" min="0" required>
+            
+            <label for="beschreibung">Beschreibung</label>
+            <textarea id="beschreibung" rows="3" required></textarea>
+            
+            <label for="image">Bild (optional)</label>
+            <input type="file" id="image" accept=".png, .jpg, .jpeg">
+            
+            <button type="submit">Hinzufügen</button>
+        </form>
+    </div>
+    <script>
+        function setupWebSocket() {
+            const access_token = localStorage.getItem('accessToken');
+            const type = localStorage.getItem('type');
+
+            if (!access_token || type != 'restaurant') {
+                console.warn('No access token found. Restaurant might not be logged in.');
+                return;
+            }
+
+            if (Notification.permission === "default") {
+                Notification.requestPermission();
+            }
+
+            const socket = io('http://127.0.0.1:5000');
+
+            socket.on('connect', () => {
+                console.log('Socket connected:', socket.id);
+
+                // Authenticate with the server
+                socket.emit('authenticate', { access_token: access_token });
+            });
+
+            socket.on('authenticated', () => {
+                console.log('Authenticated successfully.');
+            });
+
+            socket.on('unauthorized', (reason) => {
+                console.error('Authentication failed:', reason);
+            });
+
+            // Listen for new order events
+            socket.on('new_order', (order) => {
+                const orderId = order.id;
+                const message = order.message;
+                const detailsLink = `restaurant-order-details.html?id=${orderId}`;
+
+                // Alert with link
+                // if (confirm(`${message}\n\nDetails ansehen?`)) {
+                //     window.location.href = detailsLink;
+                // }
+
+                if (Notification.permission === "granted") {
+                    new Notification("Achtung!", { body: message });
+                }
+
+                console.log('Order details:', order);
+            });
+
+            socket.on('disconnect', () => {
+                console.warn('Socket disconnected.');
+            });
+        }
+        document.addEventListener('DOMContentLoaded', () => {
+            const accessToken = localStorage.getItem('accessToken');
+            if (!accessToken) {
+                window.location.href = 'restaurant-login.html';
+                return;
+            }
+
+            const form = document.getElementById('new-item-form');
+            form.addEventListener('submit', (event) => {
+                event.preventDefault();
+
+                const name = document.getElementById('name').value;
+                const preis = parseFloat(document.getElementById('preis').value);
+                const beschreibung = document.getElementById('beschreibung').value;
+                const imageInput = document.getElementById('image');
+                
+                const newItem = {
+                    name,
+                    preis,
+                    beschreibung
+                };
+
+                if (imageInput.files[0]) {
+                    const file = imageInput.files[0];
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                        newItem.img = {
+                            filename: file.name,
+                            image_data: reader.result.split(',')[1] // Base64 data
+                        };
+                        sendPostRequest(newItem);
+                    };
+                    reader.readAsDataURL(file);
+                } else {
+                    sendPostRequest(newItem);
+                }
+
+                function sendPostRequest(data) {
+                    fetch('http://127.0.0.1:5000/restaurants/menu', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${accessToken}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(data)
+                    })
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('Der neue Artikel konnte nicht hinzugefügt werden. Bitte versuchen Sie es später noch einmal.');
+                        }
+                        window.location.href = 'menu.html';
+                    })
+                    .catch(error => {
+                        alert(error.message);
+                    });
+                }
+            });
+
+            setupWebSocket();
+        });
+    </script>
+
+    <!-- Shared navbar script -->
+    <script src="navbar.js"></script>
+
+    <script src="https://cdn.socket.io/4.8.1/socket.io.min.js" integrity="sha384-mkQ3/7FUtcGyoppY6bz/PORYoGqOl7/aSUMn2ymDOJcapfS6PHqxhRTMh1RR0Q6+" crossorigin="anonymous"></script>
+</body>
+</html>

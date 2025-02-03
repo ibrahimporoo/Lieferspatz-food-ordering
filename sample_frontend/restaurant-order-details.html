@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bestellung | Lieferspatz</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .order-details-container {
+            max-width: 800px;
+            margin: 2rem auto;
+            padding: 0 2rem;
+        }
+
+        .order-info {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .user-info {
+            margin-bottom: 1rem;
+            color: #666;
+        }
+
+        .order-status {
+            padding: 0.25rem 0.75rem;
+            border-radius: 4px;
+            font-weight: bold;
+            margin-bottom: 1rem;
+            display: inline-block;
+        }
+
+        .status-in-bearbeitung { background-color: #fff3cd; color: #856404; }
+        .status-in-zubereitung { background-color: #cce5ff; color: #004085; }
+        .status-abgeschlossen { background-color: #d4edda; color: #155724; }
+        .status-storniert { background-color: #f8d7da; color: #721c24; }
+
+        .items-list {
+            margin-top: 2rem;
+        }
+
+        .item-card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .item-name {
+            font-weight: bold;
+        }
+
+        .item-price {
+            color: #333;
+        }
+
+        .item-quantity {
+            background-color: #f0f0f0;
+            padding: 0.25rem 0.75rem;
+            border-radius: 4px;
+        }
+
+        .total-price {
+            font-size: 1.2rem;
+            font-weight: bold;
+            text-align: right;
+            margin-top: 2rem;
+            padding-top: 1rem;
+            border-top: 2px solid #ddd;
+        }
+
+        .action-buttons {
+            margin-top: 2rem;
+            display: flex;
+            gap: 1rem;
+        }
+
+        .button {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .button.confirm {
+            background-color: #28a745;
+            color: white;
+        }
+
+        .button.reject {
+            background-color: #dc3545;
+            color: white;
+        }
+
+        .button.send {
+            background-color: #007bff;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar" id="navbar"></nav>
+
+    <div class="order-details-container">
+        <h1>Bestellungsdetails</h1>
+        <div id="order-content">
+            <div class="order-info">
+                <div class="user-info">
+                    <h3>Kunde: <span id="user-name"></span></h3>
+                    <p>Adresse: <span id="user-address"></span></p>
+                </div>
+                <div class="order-status" id="order-status"></div>
+                <p>Bestellzeit: <span id="order-time"></span></p>
+                <p id="order-notes"></p>
+            </div>
+
+            <div class="items-list" id="items-list"></div>
+            <div class="total-price" id="order-total"></div>
+
+            <div class="action-buttons" id="action-buttons"></div>
+        </div>
+        <div id="error-message" class="error-message"></div>
+    </div>
+
+    <script src="navbar.js"></script>
+    <script>
+        function setupWebSocket() {
+            const access_token = localStorage.getItem('accessToken');
+            const type = localStorage.getItem('type');
+
+            if (!access_token || type != 'restaurant') {
+                console.warn('No access token found. Restaurant might not be logged in.');
+                return;
+            }
+
+            if (Notification.permission === "default") {
+                Notification.requestPermission();
+            }
+
+            const socket = io('http://127.0.0.1:5000');
+
+            socket.on('connect', () => {
+                console.log('Socket connected:', socket.id);
+
+                // Authenticate with the server
+                socket.emit('authenticate', { access_token: access_token });
+            });
+
+            socket.on('authenticated', () => {
+                console.log('Authenticated successfully.');
+            });
+
+            socket.on('unauthorized', (reason) => {
+                console.error('Authentication failed:', reason);
+            });
+
+            // Listen for new order events
+            socket.on('new_order', (order) => {
+                const orderId = order.id;
+                const message = order.message;
+                const detailsLink = `restaurant-order-details.html?id=${orderId}`;
+
+                // Alert with link
+                // if (confirm(`${message}\n\nDetails ansehen?`)) {
+                //     window.location.href = detailsLink;
+                // }
+
+                if (Notification.permission === "granted") {
+                    new Notification("Achtung!", { body: message });
+                }
+
+                console.log('Order details:', order);
+            });
+
+            socket.on('disconnect', () => {
+                console.warn('Socket disconnected.');
+            });
+        }
+        const urlParams = new URLSearchParams(window.location.search);
+        const orderId = urlParams.get('id');
+
+        async function fetchOrderDetails() {
+            const token = localStorage.getItem('accessToken');
+            
+            if (!token) {
+                window.location.href = 'restaurant-login.html';
+                return;
+            }
+
+            if (!orderId) {
+                window.location.href = 'restaurant-orders.html';
+                return;
+            }
+
+            try {
+                const response = await fetch(`http://127.0.0.1:5000/orders/${orderId}`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (response.status === 401) {
+                    localStorage.removeItem('accessToken');
+                    localStorage.removeItem('userBalance');
+                    localStorage.removeItem('type');
+                    window.location.href = 'restaurant-login.html';
+                    return;
+                }
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                localStorage.setItem('userBalance', data.data.geld);
+                displayOrderDetails(data.data);
+
+            } catch (error) {
+                console.error('Order details fetch error:', error);
+                document.getElementById('error-message').textContent = 
+                    'Bestellungsdetails konnten nicht geladen werden. Bitte versuchen Sie es später erneut.';
+            }
+        }
+
+        function displayOrderDetails(data) {
+            const order = data.order;
+            const items = data.items;
+
+            // User info
+            document.getElementById('user-name').textContent = 
+                `${order.user.vorname} ${order.user.nachname}`;
+            document.getElementById('user-address').textContent = 
+                `${order.user.adresse}, ${order.user.plz}`;
+
+            // Order metadata
+            document.getElementById('order-time').textContent = 
+                new Date(order.eingang).toLocaleDateString('de-DE', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    timeZone: 'UTC'
+                });
+
+            // Status
+            const statusDiv = document.getElementById('order-status');
+            statusDiv.textContent = order.status;
+            statusDiv.className = `order-status status-${order.status.toLowerCase().replace(' ', '-')}`;
+
+            // Notes
+            const notesDiv = document.getElementById('order-notes');
+            if (order.anmerkung) {
+                notesDiv.textContent = `Anmerkung: ${order.anmerkung}`;
+            } else {
+                notesDiv.textContent = '';
+            }
+
+            // Items
+            const itemsContainer = document.getElementById('items-list');
+            itemsContainer.innerHTML = items.map(item => `
+                <div class="item-card">
+                    <div class="item-info">
+                        <div class="item-name">${item.name}</div>
+                        <div class="item-price">€${(item.preis * item.anzahl).toFixed(2)}</div>
+                    </div>
+                    <div class="item-quantity">
+                        ${item.anzahl}x €${item.preis.toFixed(2)}
+                    </div>
+                </div>
+            `).join('');
+
+            // Total
+            document.getElementById('order-total').textContent = 
+                `Gesamt: €${order.total.toFixed(2)}`;
+
+            // Action buttons
+            const buttonsContainer = document.getElementById('action-buttons');
+            buttonsContainer.innerHTML = '';
+
+            if (order.status === 'in Bearbeitung') {
+                buttonsContainer.innerHTML = `
+                    <button class="button action-button confirm" data-action="bestätigen">Bestätigen</button>
+                    <button class="button action-button reject" data-action="ablehnen">Ablehnen</button>
+                `;
+            } else if (order.status === 'in Zubereitung') {
+                buttonsContainer.innerHTML = `
+                    <button class="button action-button send" data-action="absenden">Absenden</button>
+                `;
+            }
+
+            // Add event listeners to action buttons
+            document.querySelectorAll('.action-button').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    executeAction(e.target.dataset.action)
+                });
+            });
+        }
+
+        async function executeAction(action) {
+            try {
+                const token = localStorage.getItem('accessToken');
+
+                if (!token) {
+                    window.location.href = 'restaurant-login.html';
+                    return;
+                }
+
+                const payload = {
+                    action: action
+                };
+
+                const response = await fetch(`http://127.0.0.1:5000/orders/${orderId}`, {
+                    method: 'PUT', 
+                    headers: {
+                        'Content-type':'application/json', 
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                if (response.status === 401) {
+                    localStorage.removeItem('accessToken');
+                    localStorage.removeItem('userBalance');
+                    localStorage.removeItem('type');
+                    window.location.href = 'restaurant-login.html';
+                    return;
+                }
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                localStorage.setItem('userBalance', data.data.geld);
+                window.location.href = `restaurant-order-details.html?id=${orderId}`;
+
+            } catch (error) {
+                console.error('Action error:', error);
+                document.getElementById('error-message').textContent = 
+                    'Action unerfolgreich. Bitte versuchen Sie es später erneut.';
+            }
+        }
+
+        // Initial load
+        document.addEventListener('DOMContentLoaded', () => {
+            if (!localStorage.getItem('accessToken')) {
+                window.location.href = 'restaurant-login.html';
+            } else if (!orderId) {
+                window.location.href = 'restaurant-orders.html';
+            } else {
+                fetchOrderDetails();
+                setupWebSocket();
+            }
+        });
+    </script>
+
+    <script src="https://cdn.socket.io/4.8.1/socket.io.min.js" integrity="sha384-mkQ3/7FUtcGyoppY6bz/PORYoGqOl7/aSUMn2ymDOJcapfS6PHqxhRTMh1RR0Q6+" crossorigin="anonymous"></script>
+</body>
+</html>

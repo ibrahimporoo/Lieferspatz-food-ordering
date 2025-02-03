@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Speisekarte | Lieferspatz</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .menu-container {
+            max-width: 600px;
+            width: 100%;
+            background: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin-top: 20px;
+        }
+        h1 {
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
+        .menu-card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .menu-card img {
+            max-width: 100%;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+        .menu-card label {
+            align-self: flex-start;
+            margin-top: 5px;
+            font-weight: bold;
+        }
+        .menu-card input, .menu-card textarea {
+            width: 100%;
+            margin: 5px 0;
+        }
+        .price-container {
+            display: flex;
+            align-items: center;
+            width: 100%;
+        }
+        .price-container span {
+            margin-right: 5px;
+            font-size: 16px;
+            font-weight: bold;
+        }
+        .menu-card button {
+            margin: 5px;
+            padding: 5px 10px;
+            border: none;
+            border-radius: 4px;
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+        }
+        .menu-card button:hover {
+            background-color: #0056b3;
+        }
+        .add-item-btn {
+            margin: 20px;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            background-color: #28a745;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        .add-item-btn:hover {
+            background-color: #218838;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar" id="navbar"></nav>
+    <button class="add-item-btn" onclick="window.location.href='new-menu.html'">Neuen Item hinzufügen</button>
+    <div class="menu-container">
+        <h1>Speisekarte</h1>
+        <div id="menu-items">Loading menu...</div>
+    </div>
+    <script>
+        function setupWebSocket() {
+            const access_token = localStorage.getItem('accessToken');
+            const type = localStorage.getItem('type');
+
+            if (!access_token || type != 'restaurant') {
+                console.warn('No access token found. Restaurant might not be logged in.');
+                return;
+            }
+
+            if (Notification.permission === "default") {
+                Notification.requestPermission();
+            }
+
+            const socket = io('http://127.0.0.1:5000');
+
+            socket.on('connect', () => {
+                console.log('Socket connected:', socket.id);
+
+                // Authenticate with the server
+                socket.emit('authenticate', { access_token: access_token });
+            });
+
+            socket.on('authenticated', () => {
+                console.log('Authenticated successfully.');
+            });
+
+            socket.on('unauthorized', (reason) => {
+                console.error('Authentication failed:', reason);
+            });
+
+            // Listen for new order events
+            socket.on('new_order', (order) => {
+                const orderId = order.id;
+                const message = order.message;
+                const detailsLink = `restaurant-order-details.html?id=${orderId}`;
+
+                // Alert with link
+                // if (confirm(`${message}\n\nDetails ansehen?`)) {
+                //     window.location.href = detailsLink;
+                // }
+
+                if (Notification.permission === "granted") {
+                    new Notification("Achtung!", { body: message });
+                }
+
+                console.log('Order details:', order);
+            });
+
+            socket.on('disconnect', () => {
+                console.warn('Socket disconnected.');
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const accessToken = localStorage.getItem('accessToken');
+
+            if (!accessToken) {
+                window.location.href = 'restaurant-login.html';
+                return;
+            }
+
+            fetch('http://127.0.0.1:5000/restaurants/menu', {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`
+                }
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Das Menü konnte nicht abgerufen werden. Bitte versuchen Sie es später noch einmal.');
+                }
+                return response.json();
+            })
+            .then(data => {
+                localStorage.setItem('userBalance', data.data.geld);
+                const menuContainer = document.getElementById('menu-items');
+                menuContainer.innerHTML = '';
+                data.data.items.forEach(item => {
+                    const menuCard = document.createElement('div');
+                    menuCard.className = 'menu-card';
+
+                    const itemImg = document.createElement('img');
+                    itemImg.src = item.img_url;
+                    menuCard.appendChild(itemImg);
+
+                    const nameLabel = document.createElement('label');
+                    nameLabel.textContent = 'Name';
+                    menuCard.appendChild(nameLabel);
+
+                    const itemName = document.createElement('input');
+                    itemName.type = 'text';
+                    itemName.value = item.name;
+                    itemName.disabled = true;
+                    menuCard.appendChild(itemName);
+
+                    const priceLabel = document.createElement('label');
+                    priceLabel.textContent = 'Preis';
+                    menuCard.appendChild(priceLabel);
+
+                    const priceContainer = document.createElement('div');
+                    priceContainer.className = 'price-container';
+
+                    const euroSymbol = document.createElement('span');
+                    euroSymbol.textContent = '€';
+                    priceContainer.appendChild(euroSymbol);
+
+                    const itemPrice = document.createElement('input');
+                    itemPrice.type = 'number';
+                    itemPrice.step = '0.01';
+                    itemPrice.min = '0';
+                    itemPrice.value = item.preis.toFixed(2);
+                    itemPrice.disabled = true;
+                    priceContainer.appendChild(itemPrice);
+
+                    menuCard.appendChild(priceContainer);
+
+                    const descriptionLabel = document.createElement('label');
+                    descriptionLabel.textContent = 'Beschreibung';
+                    menuCard.appendChild(descriptionLabel);
+
+                    const itemDescription = document.createElement('textarea');
+                    itemDescription.rows = 3;
+                    itemDescription.value = item.beschreibung;
+                    itemDescription.disabled = true;
+                    menuCard.appendChild(itemDescription);
+
+                    const fileLabel = document.createElement('label');
+                    fileLabel.textContent = 'Bild';
+                    menuCard.appendChild(fileLabel);
+
+                    const fileInput = document.createElement('input');
+                    fileInput.type = 'file';
+                    fileInput.accept = '.png, .jpg, .jpeg';
+                    fileInput.disabled = true;
+                    menuCard.appendChild(fileInput);
+
+                    const editButton = document.createElement('button');
+                    editButton.textContent = 'Bearbeiten';
+                    editButton.addEventListener('click', () => {
+                        if (editButton.textContent === 'Bearbeiten') {
+                            itemName.disabled = false;
+                            itemPrice.disabled = false;
+                            itemDescription.disabled = false;
+                            fileInput.disabled = false;
+                            editButton.textContent = 'Bestätigen';
+                        } else {
+                            const updatedData = {
+                                name: itemName.value,
+                                preis: parseFloat(itemPrice.value).toFixed(2),
+                                beschreibung: itemDescription.value
+                            };
+
+                            if (fileInput.files[0]) {
+                                const file = fileInput.files[0];
+                                const reader = new FileReader();
+                                reader.onload = () => {
+                                    updatedData.img = {
+                                        filename: file.name,
+                                        image_data: reader.result.split(',')[1] // Base64 data
+                                    };
+                                    sendUpdateRequest();
+                                };
+                                reader.readAsDataURL(file);
+                            } else {
+                                sendUpdateRequest();
+                            }
+
+                            function sendUpdateRequest() {
+                                fetch(`http://127.0.0.1:5000/restaurants/menu/${item.id}`, {
+                                    method: 'PUT',
+                                    headers: {
+                                        'Authorization': `Bearer ${accessToken}`,
+                                        'Content-Type': 'application/json'
+                                    },
+                                    body: JSON.stringify(updatedData)
+                                })
+                                .then(response => {
+                                    if (!response.ok) {
+                                        throw new Error('Der Artikel konnte nicht aktualisiert werden. Bitte versuchen Sie es später noch einmal.');
+                                    }
+                                    window.location.href = 'menu.html';
+                                })
+                                .catch(error => {
+                                    alert(error.message);
+                                });
+                            }
+                        }
+                    });
+                    menuCard.appendChild(editButton);
+
+                    const deleteButton = document.createElement('button');
+                    deleteButton.textContent = 'Löschen';
+                    deleteButton.addEventListener('click', () => {
+                        fetch(`http://127.0.0.1:5000/restaurants/menu/${item.id}`, {
+                            method: 'DELETE',
+                            headers: {
+                                'Authorization': `Bearer ${accessToken}`
+                            }
+                        })
+                        .then(response => {
+                            if (!response.ok) {
+                                throw new Error('Der Artikel konnte nicht gelöscht werden. Bitte versuchen Sie es später noch einmal.');
+                            }
+                            window.location.href = 'menu.html';
+                        })
+                        .catch(error => {
+                            alert(error.message);
+                        });
+                    });
+                    menuCard.appendChild(deleteButton);
+
+                    menuContainer.appendChild(menuCard);
+                });
+            })
+            .catch(error => {
+                alert(error.message);
+            });
+
+            setupWebSocket();
+        });
+    </script>
+    <!-- Shared navbar script -->
+    <script src="navbar.js"></script>
+    <script src="https://cdn.socket.io/4.8.1/socket.io.min.js" integrity="sha384-mkQ3/7FUtcGyoppY6bz/PORYoGqOl7/aSUMn2ymDOJcapfS6PHqxhRTMh1RR0Q6+" crossorigin="anonymous"></script>
+</body>
+</html>

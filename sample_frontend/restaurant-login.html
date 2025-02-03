@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Restaurantsanmeldung | Lieferspatz</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <nav class="navbar" id="navbar"></nav>
+
+    <div class="content">
+        <h1>Restaurantsanmeldung</h1>
+        <form id="restaurantLoginForm">
+            <input type="email" id="email" placeholder="Email" required>
+            <input type="password" id="password" placeholder="Passwort" required>
+            <button type="submit" class="button">Anmelden</button>
+        </form>
+        <a href="restaurant-register.html">Restaurantskonto erstellen</a>
+        <div id="error-message" style="color: red; margin-top: 1rem;"></div>
+    </div>
+
+    <!-- Shared navbar script -->
+    <script src="navbar.js"></script>
+
+    <script>
+        document.getElementById('restaurantLoginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+            try {
+                const response = await fetch('http://127.0.0.1:5000/restaurants/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        email: email,
+                        passwort: password
+                    }),
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    // Store token and balance
+                    localStorage.setItem('accessToken', data.data.access_token);
+                    localStorage.setItem('userBalance', data.data.geld);
+                    localStorage.setItem('type', 'restaurant');
+
+                    // Redirect to open restaurants
+                    window.location.href = 'restaurant-orders.html';
+                } else {
+                    document.getElementById('error-message').textContent = 
+                        data.message || 'Anmeldung fehlgeschlagen. Bitte überprüfen Sie Ihre Anmeldedaten.';
+                }
+
+            } catch (error) {
+                console.error('Login error:', error);
+                document.getElementById('error-message').textContent = 
+                    'Error. Bitte versuchen Sie es erneut.';
+            }
+        });
+    </script>
+
+    <script src="https://cdn.socket.io/4.8.1/socket.io.min.js" integrity="sha384-mkQ3/7FUtcGyoppY6bz/PORYoGqOl7/aSUMn2ymDOJcapfS6PHqxhRTMh1RR0Q6+" crossorigin="anonymous"></script>
+</body>
+</html>

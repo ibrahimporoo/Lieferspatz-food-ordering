@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Restaurant Profil | Lieferspatz</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .opening-hours {
+            margin: 2rem 0;
+            padding: 1rem;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+
+        .day-container {
+            margin: 1rem 0;
+            padding: 1rem;
+            border-bottom: 1px solid #eee;
+        }
+
+        .time-inputs {
+            display: flex;
+            gap: 1rem;
+            margin-top: 0.5rem;
+        }
+
+        .time-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .time-group span {
+            min-width: 40px;
+        }
+
+        .time-select {
+            padding: 0.25rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .closed-checkbox {
+            margin-right: 0.5rem;
+        }
+        .error-message {
+            color: red;
+            margin: 1rem 0;
+        }
+
+        .button {
+            background: #333;
+            color: white;
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .button:hover {
+            background: #555;
+        }
+        .profile-container {
+            max-width: 800px;
+            margin: 2rem auto;
+            padding: 2rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: bold;
+        }
+
+        input, textarea {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .image-preview {
+            max-width: 200px;
+            margin: 1rem 0;
+        }
+
+        .lieferradius-container {
+            margin: 1rem 0;
+        }
+
+        .lieferradius-input {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar" id="navbar"></nav>
+
+    <div class="profile-container">
+        <h1>Restaurant Profil</h1>
+        <form id="profileForm">
+            <!-- Current Images -->
+            <div class="form-group">
+                <label>Aktuelles Logo:</label>
+                <img id="currentLogo" class="image-preview" src="" alt="Current logo">
+            </div>
+            
+            <div class="form-group">
+                <label>Aktuelles Bild:</label>
+                <img id="currentImage" class="image-preview" src="" alt="Current restaurant image">
+            </div>
+
+            <!-- Editable Fields -->
+            <div class="form-group">
+                <label for="email">Email:</label>
+                <input type="email" id="email" required>
+            </div>
+
+            <div class="form-group">
+                <label for="passwort">Neues Passwort (leer lassen um nicht zu ändern):</label>
+                <input type="password" id="passwort">
+            </div>
+
+            <div class="form-group">
+                <label for="name">Name:</label>
+                <input type="text" id="name" required>
+            </div>
+
+            <div class="form-group">
+                <label for="adresse">Adresse:</label>
+                <input type="text" id="adresse" required>
+            </div>
+
+            <div class="form-group">
+                <label for="plz">PLZ:</label>
+                <input type="text" id="plz" required>
+            </div>
+
+            <div class="form-group">
+                <label for="beschreibung">Beschreibung:</label>
+                <textarea id="beschreibung" rows="3"></textarea>
+            </div>
+
+            <!-- Lieferradius -->
+            <div class="form-group lieferradius-container">
+                <label>Lieferradius:</label>
+                <div id="lieferradiusEntries"></div>
+                <button type="button" onclick="addLieferradiusField()" class="button">
+                    + Bereich hinzufügen
+                </button>
+            </div>
+            
+            <div class="opening-hours">
+                <h2>Öffnungszeiten</h2>
+                <div id="openingHoursContainer"></div>
+            </div>
+
+            <!-- File Uploads -->
+            <div class="form-group">
+                <label>Neues Logo hochladen:</label>
+                <input type="file" id="newLogo" accept="image/*">
+            </div>
+
+            <div class="form-group">
+                <label>Neues Bild hochladen:</label>
+                <input type="file" id="newImage" accept="image/*">
+            </div>
+
+            <div id="error-message" class="error-message"></div>
+            <button type="submit" class="button">Änderungen speichern</button>
+        </form>
+    </div>
+
+    <script src="navbar.js"></script>
+    <script>
+        function setupWebSocket() {
+            const access_token = localStorage.getItem('accessToken');
+            const type = localStorage.getItem('type');
+
+            if (!access_token || type != 'restaurant') {
+                console.warn('No access token found. Restaurant might not be logged in.');
+                return;
+            }
+
+            if (Notification.permission === "default") {
+                Notification.requestPermission();
+            }
+
+            const socket = io('http://127.0.0.1:5000');
+
+            socket.on('connect', () => {
+                console.log('Socket connected:', socket.id);
+
+                // Authenticate with the server
+                socket.emit('authenticate', { access_token: access_token });
+            });
+
+            socket.on('authenticated', () => {
+                console.log('Authenticated successfully.');
+            });
+
+            socket.on('unauthorized', (reason) => {
+                console.error('Authentication failed:', reason);
+            });
+
+            // Listen for new order events
+            socket.on('new_order', (order) => {
+                const orderId = order.id;
+                const message = order.message;
+                const detailsLink = `restaurant-order-details.html?id=${orderId}`;
+
+                // Alert with link
+                // if (confirm(`${message}\n\nDetails ansehen?`)) {
+                //     window.location.href = detailsLink;
+                // }
+
+                if (Notification.permission === "granted") {
+                    new Notification("Achtung!", { body: message });
+                }
+
+                console.log('Order details:', order);
+            });
+
+            socket.on('disconnect', () => {
+                console.warn('Socket disconnected.');
+            });
+        }
+
+        let lieferradiusCount = 0;
+        let initialData = null;
+        let lieferradiusEntries = [];
+        let newLogoFile = null;
+        let newImageFile = null;
+        const days = [
+            { id: 'mo', name: 'Montag' },
+            { id: 'di', name: 'Dienstag' },
+            { id: 'mi', name: 'Mittwoch' },
+            { id: 'do', name: 'Donnerstag' },
+            { id: 'fr', name: 'Freitag' },
+            { id: 'sa', name: 'Samstag' },
+            { id: 'so', name: 'Sonntag' }
+        ];
+
+        async function fetchProfile() {
+            const token = localStorage.getItem('accessToken');
+            
+            if (!token) {
+                window.location.href = 'restaurant-login.html';
+                return;
+            }
+
+            try {
+                const response = await fetch('http://127.0.0.1:5000/restaurants/profile', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (response.status === 401) {
+                    localStorage.removeItem('accessToken');
+                    localStorage.removeItem('userBalance');
+                    localStorage.removeItem('type');
+                    window.location.href = 'restaurant-login.html';
+                    return;
+                }
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                localStorage.setItem('userBalance', data.data.geld);
+                initialData = data.data;
+                currentLieferradius = [...initialData.lieferradius];
+                populateForm(initialData);
+
+            } catch (error) {
+                console.error('Profile fetch error:', error);
+                showError(error.message || 'Profil konnte nicht geladen werden');
+            }
+        }
+
+        function populateForm(profileData) {
+            // Basic fields
+            document.getElementById('email').value = profileData.email;
+            document.getElementById('name').value = profileData.name;
+            document.getElementById('adresse').value = profileData.adresse;
+            document.getElementById('plz').value = profileData.plz;
+            document.getElementById('beschreibung').value = profileData.beschreibung || '';
+            // Add password field
+            document.getElementById('passwort').value = '';
+
+            // Images
+            if (profileData.logo_url) {
+                document.getElementById('currentLogo').src = profileData.logo_url;
+            }
+            if (profileData.img_url) {
+                document.getElementById('currentImage').src = profileData.img_url;
+            }
+
+            // Lieferradius
+            lieferradiusEntries = profileData.lieferradius.map(value => ({
+                id: crypto.randomUUID(), // Generate unique ID for each entry
+                value
+            }));
+            renderLieferradius();
+
+            renderOpeningHours(profileData);
+        }
+
+        function addLieferradiusField(value = '') {
+            lieferradiusEntries.push({
+                id: crypto.randomUUID(),
+                value
+            });
+            renderLieferradius();
+        }
+
+        function renderLieferradius() {
+            const container = document.getElementById('lieferradiusEntries');
+            container.innerHTML = lieferradiusEntries.map((entry, index) => `
+                <div class="lieferradius-input">
+                    <input type="text" 
+                        value="${entry.value}"
+                        placeholder="PLZ (z.B. 10115)"
+                        oninput="handleLieferradiusInput('${entry.id}', this.value)">
+                    <button type="button" class="button" 
+                            onclick="removeLieferradiusEntry('${entry.id}')">
+                        x
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        function handleLieferradiusInput(id, value) {
+            const entry = lieferradiusEntries.find(e => e.id === id);
+            if (entry) entry.value = value;
+        }
+
+        function removeLieferradiusEntry(id) {
+            lieferradiusEntries = lieferradiusEntries.filter(e => e.id !== id);
+            renderLieferradius();
+        }
+
+        async function readFileAsBase64(file) {
+            // Same implementation as in restaurant-register.html
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve({
+                    filename: file.name,
+                    image_data: reader.result.split(',')[1]
+                });
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
+
+        function showError(message) {
+            document.getElementById('error-message').textContent = message;
+        }
+
+        // Form submission (to be implemented)
+        document.getElementById('profileForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const errorDiv = document.getElementById('error-message');
+            errorDiv.textContent = '';
+
+            try {
+                // Validate opening hours
+                const timeData = {};
+                let isValid = true;
+
+                days.forEach(day => {
+                    const container = document.querySelector(`[data-day="${day.id}"]`);
+                    const isClosed = container.querySelector('.closed-checkbox').checked;
+                    
+                    if (isClosed) {
+                        timeData[`${day.id}_von`] = -1;
+                        timeData[`${day.id}_bis`] = -1;
+                        return;
+                    }
+
+                    const von_h = parseInt(container.querySelector('[data-type="von"][name$="_h"]').value);
+                    const von_m = parseInt(container.querySelector('[data-type="von"][name$="_m"]').value);
+                    const bis_h = parseInt(container.querySelector('[data-type="bis"][name$="_h"]').value);
+                    const bis_m = parseInt(container.querySelector('[data-type="bis"][name$="_m"]').value);
+
+                    const von = von_h * 100 + von_m;
+                    const bis = bis_h * 100 + bis_m;
+
+                    if (bis <= von) {
+                        isValid = false;
+                        errorDiv.textContent = `Ungültige Öffnungszeiten für ${day.name}: 
+                            Endzeit muss nach Startzeit liegen`;
+                        throw new Error('Time is not valid');
+                    }
+
+                    timeData[`${day.id}_von`] = von;
+                    timeData[`${day.id}_bis`] = bis;
+                });
+
+                const formData = {
+                    email: document.getElementById('email').value,
+                    name: document.getElementById('name').value,
+                    adresse: document.getElementById('adresse').value,
+                    plz: document.getElementById('plz').value,
+                    beschreibung: document.getElementById('beschreibung').value || null,
+                    passwort: document.getElementById('passwort').value || '',
+                    lieferradius: lieferradiusEntries.map(e => e.value).filter(r => r.trim() !== ''),
+                    ...timeData
+                };
+
+                // Handle file uploads
+                const logoFile = document.getElementById('newLogo').files[0];
+                const imageFile = document.getElementById('newImage').files[0];
+
+                if (logoFile) formData.logo = await readFileAsBase64(logoFile);
+                if (imageFile) formData.img = await readFileAsBase64(imageFile);
+
+                const token = localStorage.getItem('accessToken');
+                const response = await fetch('http://127.0.0.1:5000/restaurants/profile', {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(formData)
+                });
+
+                if (response.status === 401) {
+                    localStorage.removeItem('accessToken');
+                    localStorage.removeItem('userBalance');
+                    localStorage.removeItem('type');
+                    window.location.href = 'restaurant-login.html';
+                    return;
+                }
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || 'Update fehlgeschlagen');
+                }
+
+                // Refresh data after successful update
+                window.location.href = 'restaurant-profile.html';
+
+            } catch (error) {
+                console.error('Update error:', error);
+                errorDiv.textContent = error.message || 'Ein Fehler ist beim Speichern aufgetreten';
+            }
+        });
+
+        // Initial load
+        document.addEventListener('DOMContentLoaded', () => {
+            if (!localStorage.getItem('accessToken')) {
+                window.location.href = 'restaurant-login.html';
+            } else {
+                fetchProfile();
+                setupWebSocket();
+            }
+        });
+
+        function renderOpeningHours(profileData) {
+            const container = document.getElementById('openingHoursContainer');
+            container.innerHTML = days.map(day => `
+                <div class="day-container" data-day="${day.id}">
+                    <h3>${day.name}</h3>
+                    <label>
+                        <input type="checkbox" class="closed-checkbox" 
+                            ${profileData[`${day.id}_von`] === -1 ? 'checked' : ''}>
+                        Geschlossen
+                    </label>
+                    <div class="time-inputs">
+                        <div class="time-group">
+                            <span>Von:</span>
+                            ${createTimeSelect(`${day.id}_von_h`, getHours(profileData[`${day.id}_von`]))}
+                            :
+                            ${createTimeSelect(`${day.id}_von_m`, getMinutes(profileData[`${day.id}_von`]))}
+                        </div>
+                        <div class="time-group">
+                            <span>Bis:</span>
+                            ${createTimeSelect(`${day.id}_bis_h`, getHours(profileData[`${day.id}_bis`]))}
+                            :
+                            ${createTimeSelect(`${day.id}_bis_m`, getMinutes(profileData[`${day.id}_bis`]))}
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+
+            // Add event listeners
+            document.querySelectorAll('.closed-checkbox').forEach(checkbox => {
+                checkbox.addEventListener('change', function() {
+                    const dayContainer = this.closest('.day-container');
+                    const inputs = dayContainer.querySelectorAll('select');
+                    inputs.forEach(input => input.disabled = this.checked);
+                });
+            });
+        }
+
+        function createTimeSelect(name, selected) {
+            const isHour = name.includes('_h');
+            const options = Array.from({ length: isHour ? 24 : 60 }, (_, i) => {
+                const value = i.toString().padStart(2, '0');
+                return `<option value="${value}" ${value === selected ? 'selected' : ''}>${value}</option>`;
+            });
+            return `<select name="${name}" ${name.includes('_von') ? 'data-type="von"' : 'data-type="bis'}" 
+                class="time-select">${options.join('')}</select>`;
+        }
+
+        function getHours(time) {
+            if (time === -1) return '00';
+            return Math.floor(time / 100).toString().padStart(2, '0');
+        }
+
+        function getMinutes(time) {
+            if (time === -1) return '00';
+            return (time % 100).toString().padStart(2, '0');
+        }
+    </script>
+
+    <script src="https://cdn.socket.io/4.8.1/socket.io.min.js" integrity="sha384-mkQ3/7FUtcGyoppY6bz/PORYoGqOl7/aSUMn2ymDOJcapfS6PHqxhRTMh1RR0Q6+" crossorigin="anonymous"></script>
+</body>
+</html>

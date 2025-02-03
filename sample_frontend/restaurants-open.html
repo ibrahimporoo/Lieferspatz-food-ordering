@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Offene Restaurants | Lieferspatz</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        /* Additional styles for restaurant cards */
+        .restaurant-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 2rem;
+            padding: 2rem;
+        }
+
+        .restaurant-card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 1rem;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .restaurant-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .restaurant-image {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+            border-radius: 4px;
+            margin-bottom: 1rem;
+            background-color: #f5f5f5; /* Fallback if no image */
+        }
+
+        .restaurant-name {
+            font-size: 1.2rem;
+            margin-bottom: 0.5rem;
+            color: #333;
+        }
+
+        .restaurant-address {
+            color: #666;
+            margin-bottom: 0.5rem;
+        }
+
+        .restaurant-description {
+            color: #444;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar" id="navbar"></nav>
+
+    <div class="content">
+        <h1>Offene Restaurants, die an dir beliefern können</h1>
+        <div id="restaurant-list" class="restaurant-list">
+            <!-- Restaurant cards will be inserted here by JavaScript -->
+        </div>
+    </div>
+
+    <script src="navbar.js"></script>
+    <script>
+        // Fetch open restaurants when the page loads
+        async function fetchOpenRestaurants() {
+            const token = localStorage.getItem('accessToken');
+            
+            if (!token) {
+                window.location.href = 'user-login.html';
+                return;
+            }
+
+            try {
+                const response = await fetch('http://127.0.0.1:5000/restaurants/open', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (response.status === 401) {
+                    localStorage.removeItem('accessToken');
+                    localStorage.removeItem('userBalance');
+                    localStorage.removeItem('type');
+                    window.location.href = 'user-login.html';
+                    return;
+                }
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                displayRestaurants(data.data.restaurants);
+
+            } catch (error) {
+                console.error('Error fetching open restaurants:', error);
+                document.getElementById('restaurant-list').innerHTML = `
+                    <p class="error-message">Offene Restaurants konnten nicht geladen werden. Bitte versuchen Sie es später noch einmal.</p>
+                `;
+            }
+        }
+
+        // Reuse the same display function as restaurants.html
+        function displayRestaurants(restaurants) {
+            const container = document.getElementById('restaurant-list');
+            
+            if (!restaurants || restaurants.length === 0) {
+                container.innerHTML = '<p>Derzeit keine offenen Restaurants gefunden.</p>';
+                return;
+            }
+
+            const cardsHTML = restaurants.map(restaurant => `
+                <div class="restaurant-card" onclick="navigateToRestaurant('${restaurant.id}')">
+                    <img src="${restaurant.logo_url}" alt="${restaurant.name}" class="restaurant-image">
+                    <h3 class="restaurant-name">${restaurant.name}</h3>
+                    <p class="restaurant-address">${restaurant.adresse} ${restaurant.plz}</p>
+                    <p class="restaurant-description">${restaurant.beschreibung}</p>
+                </div>
+            `).join('');
+
+            container.innerHTML = cardsHTML;
+        }
+
+        // Reuse the same navigation function
+        function navigateToRestaurant(restaurantId) {
+            window.location.href = `restaurant-details.html?id=${restaurantId}`;
+        }
+
+        // Initial fetch when page loads
+        window.addEventListener('DOMContentLoaded', () => {
+            if (!localStorage.getItem('accessToken')) {
+                window.location.href = 'user-login.html';
+            } else {
+                fetchOpenRestaurants();
+            }
+        });
+    </script>
+
+    <script src="https://cdn.socket.io/4.8.1/socket.io.min.js" integrity="sha384-mkQ3/7FUtcGyoppY6bz/PORYoGqOl7/aSUMn2ymDOJcapfS6PHqxhRTMh1RR0Q6+" crossorigin="anonymous"></script>
+</body>
+</html>

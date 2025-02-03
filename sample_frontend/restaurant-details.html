@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lieferspatz</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .basket-section {
+            padding: 1rem;
+            background: #f8f9fa;
+            height: calc(100vh - 100px);
+            overflow-y: auto;
+        }
+
+        .basket-items {
+            margin: 1rem 0;
+        }
+
+        .basket-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem;
+            margin: 0.5rem 0;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .quantity-controls {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .quantity-btn {
+            padding: 0.25rem 0.75rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: white;
+            cursor: pointer;
+        }
+
+        #basket-notes {
+            width: 100%;
+            margin: 1rem 0;
+            padding: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .basket-total {
+            font-weight: bold;
+            font-size: 1.2rem;
+            text-align: right;
+            margin: 1rem 0;
+        }
+
+        .basket-actions {
+            display: flex;
+            gap: 0.5rem;
+            justify-content: flex-end;
+        }
+        /* Split view layout */
+        .split-container {
+            display: grid;
+            grid-template-columns: 80% 20%;
+            gap: 2rem;
+            min-height: 80vh;
+        }
+
+        /* Restaurant details styling */
+        .restaurant-header {
+            display: flex;
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .restaurant-image {
+            width: 200px;
+            height: 200px;
+            object-fit: cover;
+            border-radius: 8px;
+        }
+
+        .opening-hours table {
+            width: 100%;
+            margin-top: 1rem;
+        }
+
+        /* Menu items styling */
+        .menu-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-top: 2rem;
+        }
+
+        .menu-item {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 1rem;
+        }
+
+        .menu-item img {
+            width: 100%;
+            height: 150px;
+            object-fit: cover;
+            border-radius: 4px;
+        }
+
+        /* Basket section styling */
+        .basket-section {
+            border-left: 2px solid #ddd;
+            padding-left: 2rem;
+        }
+
+        @media (max-width: 768px) {
+            .split-container {
+                grid-template-columns: 1fr;
+            }
+            .basket-section {
+                border-left: none;
+                border-top: 2px solid #ddd;
+                padding-left: 0;
+                padding-top: 2rem;
+            }
+        }
+
+        /* Add button styling */
+        .basket-actions button {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .basket-actions button:nth-child(1) { /* Delete */
+            background-color: #ff4444;
+            color: white;
+        }
+
+        .basket-actions button:nth-child(2) { /* Save */
+            background-color: #33b5e5;
+            color: white;
+        }
+
+        .basket-actions button:nth-child(3) { /* Order */
+            background-color: #00C851;
+            color: white;
+        }
+
+        .basket-actions button:hover {
+            opacity: 0.9;
+        }
+        /* Add hover effect to basket items */
+        .menu-item button {
+            background-color: #333;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .menu-item button:hover {
+            background-color: #555;
+        }
+
+        /* Add transition for smooth updates */
+        .basket-item {
+            transition: all 0.3s ease;
+        }
+
+        .quantity-btn {
+            min-width: 30px;
+            transition: background-color 0.2s;
+        }
+
+        .quantity-btn:hover {
+            background-color: #f0f0f0;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar" id="navbar"></nav>
+
+    <div class="content">
+        <div class="split-container">
+            <!-- Restaurant Section -->
+            <div id="restaurant-section">
+                <div id="restaurant-details"></div>
+                <div id="menu-section"></div>
+            </div>
+
+            <!-- Basket Section -->
+            <div class="basket-section" id="basket-container">
+                <!-- Will be populated later -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Shared navbar script -->
+    <script src="navbar.js"></script>
+    <script>
+        // Get restaurant ID from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const restaurantId = urlParams.get('id');
+
+        // Days mapping (German abbreviations to full names)
+        const daysMap = {
+            mo: 'Montag',
+            di: 'Dienstag',
+            mi: 'Mittwoch',
+            do: 'Donnerstag',
+            fr: 'Freitag',
+            sa: 'Samstag',
+            so: 'Sonntag'
+        };
+
+        // Initialize basket state
+        let basket = {
+            anmerkung: '',
+            total: 0
+        };
+        let basketItems = [];
+
+        // Load restaurant details and basket
+        async function loadRestaurantDetails() {
+            if (!restaurantId) {
+                alert('Keine Restaurant-ID angegeben');
+                window.location.href = 'restaurants.html';
+                return;
+            }
+
+            try {
+                // Load restaurant data
+                const restaurantResponse = await fetch(`http://127.0.0.1:5000/restaurants/${restaurantId}`);
+                if (!restaurantResponse.ok) throw new Error('Laden des Restaurants fehlgeschlagen');
+                const restaurantData = await restaurantResponse.json();
+                
+                localStorage.setItem('geld', restaurantData.data.geld);
+                renderRestaurantDetails(restaurantData.data.restaurant);
+                renderMenu(restaurantData.data.menu);
+
+                // Load basket if ID exists
+                const basketId = urlParams.get('basketId');
+                const accessToken = localStorage.getItem('accessToken');
+                
+                if (basketId && accessToken) {
+                    const basketResponse = await fetch(`http://127.0.0.1:5000/baskets/${basketId}`, {
+                        headers: {
+                            'Authorization': `Bearer ${accessToken}`
+                        }
+                    });
+                    
+                    if (!basketResponse.ok) throw new Error('Laden des Korbes fehlgeschlagen');
+                    const basketData = await basketResponse.json();
+                    
+                    basket = {
+                        anmerkung: basketData.data.basket.anmerkung,
+                        total: basketData.data.basket.total
+                    };
+                    basketItems = basketData.data.items;
+                }
+
+                // Render basket if not empty
+                if (basket.total > 0 || basketItems.length > 0 || basket.anmerkung !== '') {
+                    renderBasket();
+                }
+
+            } catch (error) {
+                alert(`Error: ${error.message}`);
+                window.location.href = 'restaurants.html';
+            }
+        }
+
+        function renderBasket() {
+            const container = document.getElementById('basket-container');
+            
+            const basketHTML = `
+                <h3>Dein Korb</h3>
+                <textarea id="basket-notes" rows="4" 
+                    placeholder="Besondere Instruktionen">${basket.anmerkung}</textarea>
+                
+                <div class="basket-items">
+                    ${basketItems.map(item => `
+                        <div class="basket-item">
+                            <div class="item-info">
+                                <h4>${item.name}</h4>
+                                <p>€${item.preis.toFixed(2)} x ${item.anzahl}</p>
+                            </div>
+                            <div class="quantity-controls">
+                                <button class="quantity-btn" data-item="${item.item_id}" data-action="-">-</button>
+                                <button class="quantity-btn" data-item="${item.item_id}" data-action="+">+</button>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+                
+                <div class="basket-total">
+                    Total: €${basket.total.toFixed(2)}
+                </div>
+                
+                <div class="basket-actions">
+                    <button onclick="handleBasketDelete()">Löschen</button>
+                    <button onclick="handleBasketSave()">Speichern</button>
+                    <button onclick="handleBasketOrder()">Bestellen</button>
+                </div>
+            `;
+
+            container.innerHTML = basketHTML;
+
+            // Add event listeners to quantity buttons
+            document.querySelectorAll('.quantity-btn').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    const itemId = Number(e.target.dataset.item);
+                    const delta = e.target.dataset.action === '+' ? 1 : -1;
+                    handleQuantityAction(itemId, delta);
+                });
+            });
+        }
+
+        function renderRestaurantDetails(restaurant) {
+            const container = document.getElementById('restaurant-details');
+            
+            const detailsHTML = `
+                <div class="restaurant-header">
+                    <img src="${restaurant.img_url}" alt="${restaurant.name}" class="restaurant-image">
+                    <div>
+                        <h1>${restaurant.name}</h1>
+                        <p>${restaurant.adresse}, ${restaurant.plz}</p>
+                        <p>${restaurant.beschreibung || "Keine Beschreibung"}</p>
+                    </div>
+                </div>
+                <div class="opening-hours">
+                    <h2>Öffnungszeiten</h2>
+                    <table>
+                        ${Object.entries(daysMap).map(([abbr, day]) => `
+                            <tr>
+                                <td>${day}:</td>
+                                <td>${restaurant[abbr] || 'Geschlossen'}</td>
+                            </tr>
+                        `).join('')}
+                    </table>
+                </div>
+            `;
+
+            container.innerHTML = detailsHTML;
+        }
+
+        function renderMenu(menuItems) {
+            const container = document.getElementById('menu-section');
+            
+            const menuHTML = `
+                <h2>Speisekarte</h2>
+                <div class="menu-grid">
+                    ${menuItems.map(item => `
+                        <div class="menu-item">
+                            ${item.img_url ? `<img src="${item.img_url}" alt="${item.name}">` : ''}
+                            <h3>${item.name}</h3>
+                            <p>${item.beschreibung}</p>
+                            <p>€${item.preis.toFixed(2)}</p>
+                            <button class="add-to-basket" 
+                                onclick="handleAddToBasket({id:'${item.id}',name:'${item.name.replace(/'/g, "\\'")}',preis:${item.preis}})">
+                                    In den Korb legen
+                            </button>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+
+            container.innerHTML = menuHTML;
+        }
+
+        // Initial load
+        document.addEventListener('DOMContentLoaded', loadRestaurantDetails);
+
+        // Basket handling functions
+        async function handleBasketDelete() {
+            const basketId = urlParams.get('basketId');
+            const accessToken = localStorage.getItem('accessToken');
+
+            try {
+                // Reset local state
+                basket = { anmerkung: '', total: 0 };
+                basketItems = [];
+                
+                // Delete from server if exists
+                if (basketId && accessToken) {
+                    const response = await fetch(`http://127.0.0.1:5000/baskets/${basketId}`, {
+                        method: 'DELETE',
+                        headers: {
+                            'Authorization': `Bearer ${accessToken}`
+                        }
+                    });
+
+                    if (!response.ok) throw new Error('Löschen fehlgeschlagen');
+                }
+
+                // Redirect without basketId
+                window.location.href = `restaurant-details.html?id=${restaurantId}`;
+
+            } catch (error) {
+                alert(`Delete failed: ${error.message}`);
+                window.location.href = 'restaurants.html';
+            }
+        }
+
+        async function handleBasketSave() {
+            const accessToken = localStorage.getItem('accessToken');
+            if (!accessToken) {
+                window.location.href = 'user-login.html';
+                return;
+            }
+
+            try {
+                // Update local state from textarea
+                basket.anmerkung = document.getElementById('basket-notes').value;
+
+                const payload = {
+                    resto_id: restaurantId,
+                    anmerkung: basket.anmerkung,
+                    total: basket.total,
+                    items: basketItems
+                };
+
+                const basketId = urlParams.get('basketId');
+                const method = 'PUT';
+                const url = basketId ? 
+                    `http://127.0.0.1:5000/baskets/${basketId}` : 
+                    'http://127.0.0.1:5000/baskets';
+
+                const response = await fetch(url, {
+                    method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${accessToken}`
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || 'Speichern fehlgeschlagen');
+                }
+
+                const data = await response.json();
+                window.location.search = `?id=${restaurantId}&basketId=${data.data.basket_id}`;
+
+            } catch (error) {
+                alert(`Save failed: ${error.message}`);
+            }
+        }
+
+        async function handleBasketOrder() {
+            const accessToken = localStorage.getItem('accessToken');
+            if (!accessToken) {
+                window.location.href = 'user-login.html';
+                return;
+            }
+
+            try {
+                // Update local state from textarea
+                basket.anmerkung = document.getElementById('basket-notes').value;
+
+                const payload = {
+                    resto_id: restaurantId,
+                    anmerkung: basket.anmerkung,
+                    total: basket.total,
+                    items: basketItems
+                };
+
+                const basketId = urlParams.get('basketId');
+                const method = 'POST';
+                const url = basketId ? 
+                    `http://127.0.0.1:5000/baskets/${basketId}` : 
+                    'http://127.0.0.1:5000/baskets';
+
+                const response = await fetch(url, {
+                    method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${accessToken}`
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.data.basket_id || '');
+                }
+
+                const data = await response.json();
+                localStorage.setItem('userBalance', data.data.geld);
+                window.location.href = `order-details.html?id=${data.data.bestellung_id}`;
+
+            } catch (error) {
+                alert(`Bestellung fehlgeschlagen: Nicht verfügbar / Unzureichendes Guthaben, im Warenkorb gespeichert`);
+                window.location.search = `?id=${restaurantId}&basketId=${error.message}`;
+            }
+        }
+
+        // Add to basket handler
+        function handleAddToBasket(item) {
+            // Check authentication
+            if (!localStorage.getItem('accessToken')) {
+                window.location.href = 'user-login.html';
+                return;
+            }
+
+            // Update basket items
+            const existingItem = basketItems.find(i => i.item_id == item.id);
+            
+            if (existingItem) {
+                existingItem.anzahl += 1;
+            } else {
+                basketItems.push({
+                    item_id: Number(item.id),
+                    name: item.name,
+                    preis: item.preis,
+                    anzahl: Number(1)
+                });
+            }
+
+            // Update basket total
+            basket.total = basketItems.reduce((sum, item) => sum + (item.preis * item.anzahl), 0);
+
+            // Always render basket after modification
+            renderBasket();
+        }
+
+        // Quantity adjustment functions
+        function handleQuantityAction(itemId, delta) {
+            const item = basketItems.find(i => i.item_id == itemId);
+            if (!item) {
+                console.log(basketItems)
+                return;
+            }
+
+            item.anzahl += delta;
+
+            // Remove item if quantity reaches 0
+            if (item.anzahl <= 0) {
+                basketItems = basketItems.filter(i => i.item_id !== itemId);
+            }
+
+            // Update total
+            basket.total = basketItems.reduce((sum, item) => sum + (item.preis * item.anzahl), 0);
+
+            // Re-render basket
+            renderBasket();
+        }
+    </script>
+
+    <script src="https://cdn.socket.io/4.8.1/socket.io.min.js" integrity="sha384-mkQ3/7FUtcGyoppY6bz/PORYoGqOl7/aSUMn2ymDOJcapfS6PHqxhRTMh1RR0Q6+" crossorigin="anonymous"></script>
+</body>
+</html>

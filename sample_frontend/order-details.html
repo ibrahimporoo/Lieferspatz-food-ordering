@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bestellung | Lieferspatz</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .order-details-container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 0 2rem;
+        }
+
+        .restaurant-info {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .items-list {
+            display: grid;
+            gap: 1rem;
+        }
+
+        .item-card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .item-info {
+            flex-grow: 1;
+        }
+
+        .item-name {
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+
+        .item-price {
+            font-size: 1.1rem;
+            color: #333;
+        }
+
+        .item-quantity {
+            background-color: #f0f0f0;
+            padding: 0.25rem 0.75rem;
+            border-radius: 4px;
+            margin-left: 1rem;
+        }
+
+        .total-price {
+            font-size: 1.2rem;
+            font-weight: bold;
+            text-align: right;
+            margin-top: 2rem;
+            padding-top: 1rem;
+            border-top: 2px solid #ddd;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar" id="navbar"></nav>
+
+    <div class="order-details-container">
+        <h1>Bestellung Details</h1>
+        <div id="order-content">
+            <div class="restaurant-info">
+                <h2 id="restaurant-name"></h2>
+                <p id="restaurant-address"></p>
+                <p id="order-date"></p>
+                <p id="order-anmerkung"></p>
+                <p id="order-status"></p>
+            </div>
+            
+            <h3>Bestellung Items</h3>
+            <div id="order-items" class="items-list"></div>
+            <div id="order-total" class="total-price"></div>
+        </div>
+        <div id="error-message" class="error-message"></div>
+    </div>
+
+    <script src="navbar.js"></script>
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const orderId = urlParams.get('id');
+
+        async function fetchOrderDetails() {
+            const token = localStorage.getItem('accessToken');
+            
+            if (!token || !orderId) {
+                window.location.href = 'user-login.html';
+                return;
+            }
+
+            try {
+                const response = await fetch(`http://127.0.0.1:5000/orders/${orderId}`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (response.status === 401) {
+                    localStorage.removeItem('accessToken');
+                    localStorage.removeItem('userBalance');
+                    localStorage.removeItem('type');
+                    window.location.href = 'user-login.html';
+                    return;
+                }
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                localStorage.setItem('userBalance', data.data.geld);
+                displayOrderDetails(data.data);
+
+            } catch (error) {
+                console.error('Order details fetch error:', error);
+                document.getElementById('error-message').textContent = 
+                    error.message || 'Failed to load order details. Please try again.';
+            }
+        }
+
+        function displayOrderDetails(data) {
+            const order = data.order;
+            const items = data.items;
+
+            // Restaurant info
+            document.getElementById('restaurant-name').textContent = order.restaurant.name;
+            document.getElementById('restaurant-address').textContent = 
+                `${order.restaurant.adresse}, ${order.restaurant.plz}`;
+            
+            // Order metadata
+            document.getElementById('order-date').textContent = 
+                `Order Date: ${new Date(order.eingang).toLocaleDateString('de-DE', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    timeZone: 'UTC'
+                })}`;
+
+            document.getElementById('order-status').innerHTML = 
+                `Status: <span class="status-${order.status.toLowerCase()}">${order.status}</span>`;
+
+            document.getElementById('order-anmerkung').textContent = order.anmerkung;
+
+            // Order items
+            const itemsContainer = document.getElementById('order-items');
+            itemsContainer.innerHTML = items.map(item => `
+                <div class="item-card">
+                    <div class="item-info">
+                        <div class="item-name">${item.name}</div>
+                        <div class="item-price">€${(item.preis * item.anzahl).toFixed(2)}</div>
+                    </div>
+                    <div class="item-quantity">
+                        ${item.anzahl}x €${item.preis.toFixed(2)}
+                    </div>
+                </div>
+            `).join('');
+
+            // Total price
+            document.getElementById('order-total').textContent = 
+                `Gesamtkosten: €${order.total.toFixed(2)}`;
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            if (!localStorage.getItem('accessToken')) {
+                window.location.href = 'user-login.html';
+            } else {
+                fetchOrderDetails();
+            }
+        });
+    </script>
+
+    <script src="https://cdn.socket.io/4.8.1/socket.io.min.js" integrity="sha384-mkQ3/7FUtcGyoppY6bz/PORYoGqOl7/aSUMn2ymDOJcapfS6PHqxhRTMh1RR0Q6+" crossorigin="anonymous"></script>
+</body>
+</html>

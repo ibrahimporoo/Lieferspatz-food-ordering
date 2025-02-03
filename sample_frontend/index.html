@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lieferspatz</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar" id="navbar"></nav>
+
+    <div class="content">
+        <h1>Willkommen bei Lieferspatz</h1>
+    </div>
+
+    <!-- Shared navbar script -->
+    <script src="navbar.js"></script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const access_token = localStorage.getItem('accessToken');
+            const type = localStorage.getItem('type');
+
+            if (!access_token || type != 'restaurant') {
+                console.warn('No access token found. Restaurant might not be logged in.');
+                return;
+            }
+
+            if (Notification.permission === "default") {
+                Notification.requestPermission();
+            }
+
+            const socket = io('http://127.0.0.1:5000');
+
+            socket.on('connect', () => {
+                console.log('Socket connected:', socket.id);
+
+                // Authenticate with the server
+                socket.emit('authenticate', { access_token: access_token });
+            });
+
+            socket.on('authenticated', () => {
+                console.log('Authenticated successfully.');
+            });
+
+            socket.on('unauthorized', (reason) => {
+                console.error('Authentication failed:', reason);
+            });
+
+            // Listen for new order events
+            socket.on('new_order', (order) => {
+                const orderId = order.id;
+                const message = order.message;
+                const detailsLink = `restaurant-order-details.html?id=${orderId}`;
+
+                // Alert with link
+                // if (confirm(`${message}\n\nDetails ansehen?`)) {
+                //     window.location.href = detailsLink;
+                // }
+
+                if (Notification.permission === "granted") {
+                    new Notification("Achtung!", { body: message });
+                }
+
+                console.log('Order details:', order);
+            });
+
+            socket.on('disconnect', () => {
+                console.warn('Socket disconnected.');
+            });
+        });
+    </script>
+
+    <script src="https://cdn.socket.io/4.8.1/socket.io.min.js" integrity="sha384-mkQ3/7FUtcGyoppY6bz/PORYoGqOl7/aSUMn2ymDOJcapfS6PHqxhRTMh1RR0Q6+" crossorigin="anonymous"></script>
+</body>
+</html>
